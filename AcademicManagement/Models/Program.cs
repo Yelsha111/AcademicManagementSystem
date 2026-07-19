@@ -21,7 +21,7 @@ namespace AcademicManagement.Models
         // A Program must always reference an existing CollegeId (Day 1 rule:
         // "a program can never exist floating without a parent college").
         // Pass in the list of existing CollegeIds so this can be checked here.
-        public bool Validate(out string errorMessage, IEnumerable<string> existingCollegeIds)
+        public bool Validate(out string errorMessage, IEnumerable<string> existingCollegeIds, IEnumerable<Program> existingPrograms = null, string excludeId = null)
         {
             if (string.IsNullOrWhiteSpace(ProgramId))
             {
@@ -38,18 +38,29 @@ namespace AcademicManagement.Models
                 errorMessage = "CollegeId is required.";
                 return false;
             }
-           
-            // CollegeId/ProgramName are checked above.
             if (existingCollegeIds != null && !existingCollegeIds.Contains(CollegeId))
             {
                 errorMessage = $"CollegeId '{CollegeId}' does not exist. Add the College first.";
                 return false;
             }
+
+            if (existingPrograms != null)
+            {
+                var duplicate = existingPrograms.FirstOrDefault(p =>
+                    p.ProgramId != excludeId &&
+                    string.Equals(p.ProgramName.Trim(), ProgramName.Trim(), System.StringComparison.OrdinalIgnoreCase));
+
+                if (duplicate != null)
+                {
+                    errorMessage = $"A program named \"{ProgramName.Trim()}\" already exists ({duplicate.ProgramId}).";
+                    return false;
+                }
+            }
+
             errorMessage = null;
             return true;
         }
 
-        // Base-class override (no reference list available) — does basic field checks only.
         public override bool Validate(out string errorMessage)
         {
             return Validate(out errorMessage, null);

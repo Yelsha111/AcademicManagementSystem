@@ -25,6 +25,8 @@ namespace AcademicManagement.Forms
             panelGridContainer = new Panel();
             grid = new DataGridView();
             lblListTitle = new Label();
+            lblFilterCollege = new Label();
+            cboFilterCollege = new BorderedComboBox();
             panelTopCard = new Panel();
             lblStatus = new Label();
             txtSearch = new TextBox();
@@ -65,6 +67,8 @@ namespace AcademicManagement.Forms
             panelListCard.BorderStyle = BorderStyle.FixedSingle;
             panelListCard.Controls.Add(panelGridContainer);
             panelListCard.Controls.Add(lblListTitle);
+            panelListCard.Controls.Add(lblFilterCollege);
+            panelListCard.Controls.Add(cboFilterCollege);
             panelListCard.Dock = DockStyle.Fill;
             panelListCard.Location = new Point(20, 285);
             panelListCard.Margin = new Padding(0, 20, 0, 0);
@@ -115,6 +119,29 @@ namespace AcademicManagement.Forms
             lblListTitle.TabIndex = 0;
             lblListTitle.Text = "☰  Program List";
             lblListTitle.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // lblFilterCollege
+            // 
+            lblFilterCollege.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lblFilterCollege.AutoSize = true;
+            lblFilterCollege.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            lblFilterCollege.ForeColor = Color.FromArgb(150, 20, 20);
+            lblFilterCollege.Location = new Point(728, 32);
+            lblFilterCollege.Name = "lblFilterCollege";
+            lblFilterCollege.Size = new Size(130, 21);
+            lblFilterCollege.TabIndex = 2;
+            lblFilterCollege.Text = "Filter by College:";
+            // 
+            // cboFilterCollege
+            // 
+            cboFilterCollege.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            cboFilterCollege.BackColor = Color.FromArgb(250, 250, 250);
+            cboFilterCollege.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboFilterCollege.Font = new Font("Segoe UI", 9.5F);
+            cboFilterCollege.Location = new Point(883, 26);
+            cboFilterCollege.Name = "cboFilterCollege";
+            cboFilterCollege.Size = new Size(195, 29);
+            cboFilterCollege.TabIndex = 3;
             // 
             // panelTopCard
             // 
@@ -317,6 +344,7 @@ namespace AcademicManagement.Forms
             Size = new Size(1140, 900);
             panelMain.ResumeLayout(false);
             panelListCard.ResumeLayout(false);
+            panelListCard.PerformLayout();
             panelGridContainer.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)grid).EndInit();
             panelTopCard.ResumeLayout(false);
@@ -331,6 +359,8 @@ namespace AcademicManagement.Forms
         private System.Windows.Forms.Panel panelGridContainer;
         private System.Windows.Forms.DataGridView grid;
         private System.Windows.Forms.Label lblListTitle;
+        private System.Windows.Forms.Label lblFilterCollege;
+        private BorderedComboBox cboFilterCollege;
         private System.Windows.Forms.Panel panelTopCard;
         private System.Windows.Forms.Label lblStatus;
         private System.Windows.Forms.TextBox txtSearch;

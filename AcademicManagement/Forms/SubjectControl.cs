@@ -12,6 +12,7 @@ namespace AcademicManagement.Forms
     public partial class SubjectControl : UserControl
     {
         private readonly AcademicManager _manager = new AcademicManager(FirebaseConfig.GetService());
+        private Dictionary<string, string> _categoryDisplayLookup;
         private List<Subject> _allSubjects = new List<Subject>();
         private int _selectedRowIndex = -1;
         private bool _suppressLoad = false; // true while we're programmatically selecting a row
@@ -19,15 +20,20 @@ namespace AcademicManagement.Forms
         public SubjectControl()
         {
             InitializeComponent();
+            lblFilterCategory.BringToFront();
+            cboFilterCategory.BringToFront();
+            lblFilterCategory.Left = cboFilterCategory.Left - lblFilterCategory.PreferredWidth - 8;
             StyleGrid();
 
             btnAdd.Click += async (s, e) => await AddAsync();
             btnUpdate.Click += async (s, e) => await UpdateAsync();
             btnDelete.Click += async (s, e) => await DeleteAsync();
             btnClear.Click += (s, e) => ClearInputs();
-            txtSearch.TextChanged += (s, e) => ApplySearchFilter();
+            txtSearch.TextChanged += (s, e) => ApplyFilters();
+            cboFilterCategory.SelectedIndexChanged += (s, e) => ApplyFilters();
             grid.SelectionChanged += (s, e) => { if (!_suppressLoad) LoadSelectedIntoInputs(); };
             grid.CellClick += Grid_CellClick;
+            txtDescription.KeyPress += RestrictToLettersSpaceDash;
 
             this.Load += async (s, e) => { await LoadCategoriesAsync(); await RefreshAllAsync(); };
         }
@@ -45,6 +51,19 @@ namespace AcademicManagement.Forms
             grid.DefaultCellStyle.Font = new Font("Segoe UI", 9.5F);
             grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 250);
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        }
+
+        // Live-blocks any keystroke that isn't a letter, digit, space, or dash - used
+        // for Name/Description-style fields. Backspace, delete, arrow keys, etc. still
+        // work normally since those are control characters, not printable ones.
+        private void RestrictToLettersSpaceDash(object sender, KeyPressEventArgs e)
+        {
+            if (char.IsControl(e.KeyChar)) return;
+            if (char.IsLetterOrDigit(e.KeyChar) || e.KeyChar == ' ' || e.KeyChar == '-') return;
+
+            e.Handled = true;
+            lblStatus.ForeColor = Color.FromArgb(198, 40, 40);
+            lblStatus.Text = "Only letters, numbers, spaces, and dashes (-) are allowed here.";
         }
 
         // Measures every item text in a bound ComboBox and widens ONLY the
@@ -69,9 +88,32 @@ namespace AcademicManagement.Forms
                     if (textWidth > widest) widest = textWidth;
                 }
             }
-            combo.DropDownWidth = widest;
+
+            // Cap the width so the dropdown never spills past the right edge of the
+            // screen - it's a top-level popup, not confined by the form, so without
+            // this cap a wide list can hang off the edge of the monitor and get
+            // visually cut off there instead of showing the full text.
+            var screenLocation = combo.PointToScreen(Point.Empty);
+            var workingArea = Screen.FromControl(combo).WorkingArea;
+            int maxAvailable = workingArea.Right - screenLocation.X - 10;
+
+            combo.DropDownWidth = Math.Min(widest, Math.Max(maxAvailable, combo.Width));
+        }
+        // Extracts the leading letters of a SubjectCode - e.g. "IT101" -> "IT",
+        // "GE005" -> "GE". Returns null if the code doesn't start with a letter.
+        private static string ExtractPrefix(string subjectCode)
+        {
+            if (string.IsNullOrEmpty(subjectCode)) return null;
+
+            int i = 0;
+            while (i < subjectCode.Length && char.IsLetter(subjectCode[i])) i++;
+            return i > 0 ? subjectCode.Substring(0, i) : null;
         }
 
+        // Builds the Program-derived category list, used ONLY for cboCategory (the
+        // Add/Edit form) - you should be able to pick any known category prefix
+        // (IT, CS, GE, etc.) when creating a brand new Subject, even one that has
+        // no Subjects under it yet.
         private async System.Threading.Tasks.Task LoadCategoriesAsync()
         {
             try
@@ -101,12 +143,15 @@ namespace AcademicManagement.Forms
                 if (!categories.Any(c => string.Equals(c.Prefix, "GE", StringComparison.OrdinalIgnoreCase)))
                     categories.Insert(0, new { Prefix = "GE", Display = "GE — General Education" });
 
+                // Keep a lookup for nicer display text ("IT — BS Information Technology")
+                // when we build the filter dropdown later in RefreshAllAsync.
+                _categoryDisplayLookup = categories.ToDictionary(c => c.Prefix, c => c.Display, StringComparer.OrdinalIgnoreCase);
+
                 cboCategory.DataSource = null;
                 cboCategory.DisplayMember = "Display";
                 cboCategory.ValueMember = "Prefix";
                 cboCategory.DataSource = categories;
                 cboCategory.SelectedIndex = -1; // start blank, not pre-selected
-
                 WidenDropDownToFitContents(cboCategory);
             }
             catch (Exception ex)
@@ -121,26 +166,37 @@ namespace AcademicManagement.Forms
             {
                 _allSubjects = await _manager.GetSubjectsAsync();
 
-                _suppressLoad = true;
-                grid.DataSource = null;
-                grid.DataSource = _allSubjects;
+                // cboFilterCategory (list filter) - ONLY prefixes that actually appear
+                // in _allSubjects right now (distinct prefix extracted from each real
+                // SubjectCode), not the full Program-derived category list. Grows
+                // automatically as soon as the first Subject under a new prefix is added.
+                var filterOptions = _allSubjects
+                    .Select(s => ExtractPrefix(s.SubjectCode))
+                    .Where(p => !string.IsNullOrEmpty(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(prefix => new
+                    {
+                        Prefix = prefix,
+                        Display = _categoryDisplayLookup != null && _categoryDisplayLookup.TryGetValue(prefix, out var d) ? d : prefix
+                    })
+                    .OrderBy(x => x.Prefix)
+                    .ToList();
+                filterOptions.Insert(0, new { Prefix = (string)null, Display = "All Categories" });
 
-                if (grid.Columns.Contains("PrerequisitesDisplay"))
-                    grid.Columns["PrerequisitesDisplay"].HeaderText = "Prerequisites";
+                cboFilterCategory.DataSource = null;
+                cboFilterCategory.DisplayMember = "Display";
+                cboFilterCategory.ValueMember = "Prefix";
+                cboFilterCategory.DataSource = filterOptions;
+                cboFilterCategory.SelectedIndex = 0;
+                WidenDropDownToFitContents(cboFilterCategory);
 
-                grid.ClearSelection();
-                grid.CurrentCell = null;
-                _suppressLoad = false;
-                _selectedRowIndex = -1;
-
-                ClearInputs();
+                ApplyFilters();
             }
             catch (Exception ex)
             {
                 lblStatus.Text = "Could not load Subjects: " + ex.Message;
             }
         }
-
         // Selects and scrolls the grid to the row matching the given SubjectCode,
         // without re-populating the input fields (those stay cleared after Add/Update).
         private void SelectRowByCode(string subjectCode)
@@ -159,9 +215,20 @@ namespace AcademicManagement.Forms
             _suppressLoad = false;
         }
 
-        private void ApplySearchFilter()
+        // Combines the text Search box with the Category/Prefix filter dropdown
+        // above the grid - both can be used at the same time. Picking "IT" shows
+        // every SubjectCode that STARTS WITH "IT" (IT101, IT102, IT201, ...), not
+        // just one exact code.
+        private void ApplyFilters()
         {
             var filtered = _manager.SearchSubjects(_allSubjects, txtSearch.Text);
+
+            var filterPrefix = cboFilterCategory.SelectedValue as string;
+            if (!string.IsNullOrEmpty(filterPrefix))
+                filtered = filtered
+                    .Where(s => s.SubjectCode != null &&
+                                s.SubjectCode.StartsWith(filterPrefix, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
 
             _suppressLoad = true;
             grid.DataSource = null;
@@ -302,10 +369,20 @@ namespace AcademicManagement.Forms
                 return;
             }
 
-            var confirm = MessageBox.Show($"Delete Subject '{txtSubjectCode.Text}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            var subjectCode = txtSubjectCode.Text.Trim();
+            var (curriculumCount, offeringCount) = await _manager.GetSubjectDependencyCountsAsync(subjectCode);
+
+            string message = (curriculumCount > 0 || offeringCount > 0)
+                ? $"This Subject has {curriculumCount} Curriculum entry/entries and {offeringCount} Academic Offering(s) linked to it.\n\n" +
+                  $"Deleting it will also delete all of these.\n\n" +
+                  $"The related Colleges and Programs will NOT be affected.\n\n" +
+                  $"Continue?"
+                : $"Delete Subject '{subjectCode}'?";
+
+            var confirm = MessageBox.Show(message, "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (confirm != DialogResult.Yes) return;
 
-            await _manager.DeleteSubjectAsync(txtSubjectCode.Text.Trim());
+            await _manager.DeleteSubjectCascadeAsync(subjectCode);
             ClearInputs();
             await RefreshAllAsync();
         }

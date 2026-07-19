@@ -20,6 +20,9 @@ namespace AcademicManagement.Forms
         public OfferingControl()
         {
             InitializeComponent();
+            lblFilterStatus.BringToFront();
+            cboFilterStatus.BringToFront();
+            lblFilterStatus.Left = cboFilterStatus.Left - lblFilterStatus.PreferredWidth - 8;
             StyleGrid();
 
             cboStatus.SelectedIndex = -1; // start blank, not pre-selected
@@ -28,10 +31,12 @@ namespace AcademicManagement.Forms
             btnUpdate.Click += async (s, e) => await UpdateAsync();
             btnDelete.Click += async (s, e) => await DeleteAsync();
             btnClear.Click += (s, e) => ClearInputs();
-            txtSearch.TextChanged += (s, e) => ApplySearchFilter();
+            txtSearch.TextChanged += (s, e) => ApplyFilters();
+            cboFilterStatus.SelectedIndexChanged += (s, e) => ApplyFilters();
             grid.SelectionChanged += (s, e) => { if (!_suppressLoad) LoadSelectedIntoInputs(); };
             grid.CellClick += Grid_CellClick;
             cboSubjectCode.SelectedIndexChanged += (s, e) => RefreshSemesterOptions();
+            txtSchoolYear.KeyPress += TxtSchoolYear_KeyPress;
 
             this.Load += async (s, e) => await RefreshAllAsync();
         }
@@ -69,7 +74,12 @@ namespace AcademicManagement.Forms
                     if (width > maxWidth) maxWidth = width;
                 }
             }
-            combo.DropDownWidth = maxWidth;
+
+            var screenLocation = combo.PointToScreen(Point.Empty);
+            var workingArea = Screen.FromControl(combo).WorkingArea;
+            int maxAvailable = workingArea.Right - screenLocation.X - 10;
+
+            combo.DropDownWidth = Math.Min(maxWidth, Math.Max(maxAvailable, combo.Width));
         }
 
         private async System.Threading.Tasks.Task RefreshAllAsync()
@@ -92,14 +102,28 @@ namespace AcademicManagement.Forms
 
                 _allOfferings = await _manager.GetOfferingsAsync();
 
-                _suppressLoad = true;
-                grid.DataSource = null;
-                grid.DataSource = _allOfferings;
-                grid.ClearSelection();
-                grid.CurrentCell = null;
-                _suppressLoad = false;
-                _selectedRowIndex = -1;
+                // cboFilterStatus (list filter) - ONLY Status values that
+                // actually appear among the current Offerings right now
+                // (distinct Status from _allOfferings), not the full fixed
+                // Open/Closed/Cancelled list. Grows automatically as soon as
+                // the first Offering with a given Status is added.
+                var filterOptions = _allOfferings
+                    .Select(o => o.Status)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(s => s)
+                    .Select(s => new { Status = s, Display = s })
+                    .ToList();
+                filterOptions.Insert(0, new { Status = (string)null, Display = "All Status" });
 
+                cboFilterStatus.DataSource = null;
+                cboFilterStatus.DisplayMember = "Display";
+                cboFilterStatus.ValueMember = "Status";
+                cboFilterStatus.DataSource = filterOptions;
+                cboFilterStatus.SelectedIndex = 0;
+                WidenDropDownToFitContents(cboFilterStatus);
+
+                ApplyFilters();
                 ClearInputs();
             }
             catch (Exception ex)
@@ -152,15 +176,36 @@ namespace AcademicManagement.Forms
             txtSemester.Text = matchedSemester ?? "";
         }
 
-        private void ApplySearchFilter()
+        private void TxtSchoolYear_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            bool isDigit = char.IsDigit(e.KeyChar);
+            bool isDash = e.KeyChar == '-';
+            bool isControl = char.IsControl(e.KeyChar);
+
+            if (!isDigit && !isDash && !isControl)
+            {
+                e.Handled = true;
+                lblStatusMsg.ForeColor = Color.FromArgb(198, 40, 40);
+                lblStatusMsg.Text = "School Year can only contain numbers and a dash (e.g. 2025-2026).";
+            }
+        }
+
+        // Combines the text Search box with the Status filter dropdown above
+        // the grid - both can be used at the same time.
+        private void ApplyFilters()
         {
             var keyword = txtSearch.Text.ToLower();
             var filtered = string.IsNullOrWhiteSpace(keyword)
-                ? _allOfferings
-                : _allOfferings.Where(o => o.OfferingID.ToLower().Contains(keyword)
-                                         || o.SubjectCode.ToLower().Contains(keyword)
-                                         || o.SchoolYear.ToLower().Contains(keyword)
-                                         || o.Status.ToLower().Contains(keyword)).ToList();
+        ? _allOfferings
+        : _allOfferings.Where(o => o.OfferingID.ToLower().Contains(keyword)
+                                 || o.SubjectCode.ToLower().Contains(keyword)
+                                 || o.SchoolYear.ToLower().Contains(keyword)
+                                 || o.Status.ToLower().Contains(keyword)
+                                 || (o.Semester ?? "").ToLower().Contains(keyword)).ToList();   // ⬅️ bagong linya
+
+            var filterStatus = cboFilterStatus.SelectedValue as string;
+            if (!string.IsNullOrEmpty(filterStatus))
+                filtered = filtered.Where(o => string.Equals(o.Status, filterStatus, StringComparison.OrdinalIgnoreCase)).ToList();
 
             _suppressLoad = true;
             grid.DataSource = null;
@@ -227,12 +272,27 @@ namespace AcademicManagement.Forms
                 return;
             }
 
+            var isDuplicate = await _manager.IsDuplicateOfferingAsync(
+                cboSubjectCode.SelectedValue as string,
+                txtSchoolYear.Text.Trim(),
+                txtSemester.Text);
+
+            if (isDuplicate)
+            {
+                var confirm = MessageBox.Show(
+                    "An Academic Offering with this exact Subject, School Year, and Semester already exists. Add it anyway?",
+                    "Possible Duplicate",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (confirm != DialogResult.Yes) return;
+            }
+
             var (success, error, newId) = await _manager.AddOfferingAsync(
                 cboSubjectCode.SelectedValue as string,
                 txtSchoolYear.Text.Trim(),
                 txtSemester.Text,
                 cboStatus.SelectedItem as string);
-
             if (!success)
             {
                 lblStatusMsg.ForeColor = Color.FromArgb(198, 40, 40);
@@ -257,6 +317,23 @@ namespace AcademicManagement.Forms
             }
 
             var updatedId = txtOfferingID.Text.Trim();
+
+            var isDuplicate = await _manager.IsDuplicateOfferingAsync(
+                cboSubjectCode.SelectedValue as string,
+                txtSchoolYear.Text.Trim(),
+                txtSemester.Text,
+                excludeId: updatedId);
+
+            if (isDuplicate)
+            {
+                var confirm = MessageBox.Show(
+                    "An Academic Offering with this exact Subject, School Year, and Semester already exists. Update anyway?",
+                    "Possible Duplicate",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (confirm != DialogResult.Yes) return;
+            }
 
             var offering = new AcademicOffering
             {
@@ -300,6 +377,11 @@ namespace AcademicManagement.Forms
         }
 
         private void panelTopCard_Paint(object sender, PaintEventArgs e)
+        {
+
+        }
+
+        private void lblListTitle_Click(object sender, EventArgs e)
         {
 
         }

@@ -8,7 +8,7 @@ namespace AcademicManagement.Models
     // Science in" prefix included) - same style as the existing Subject category
     // prefixes ("IT", "CS", "GE"). Used by AcademicManager to auto-fill
     // Program.Abbreviation when a Program is added, based on the two program lists
-    //  provided (College of Engineering/CICS-adjacent list, and the second
+    // you provided (College of Engineering/CICS-adjacent list, and the second
     // College's list).
     //
     // If a ProgramName isn't in this table (e.g. a brand new program your team

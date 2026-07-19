@@ -20,15 +20,20 @@ namespace AcademicManagement.Forms
         public ProgramControl()
         {
             InitializeComponent();
+            lblFilterCollege.BringToFront();
+            cboFilterCollege.BringToFront();
+            lblFilterCollege.Left = cboFilterCollege.Left - lblFilterCollege.PreferredWidth - 8;
             StyleGrid();
 
             btnAdd.Click += async (s, e) => await AddAsync();
             btnUpdate.Click += async (s, e) => await UpdateAsync();
             btnDelete.Click += async (s, e) => await DeleteAsync();
             btnClear.Click += (s, e) => ClearInputs();
-            txtSearch.TextChanged += (s, e) => ApplySearchFilter();
+            txtSearch.TextChanged += (s, e) => ApplyFilters();
+            cboFilterCollege.SelectedIndexChanged += (s, e) => ApplyFilters();
             grid.SelectionChanged += (s, e) => { if (!_suppressLoad) LoadSelectedIntoInputs(); };
             grid.CellClick += Grid_CellClick;
+            txtProgramName.KeyPress += RestrictToLettersSpaceDash;
 
             this.Load += async (s, e) => await RefreshAllAsync();
         }
@@ -46,6 +51,19 @@ namespace AcademicManagement.Forms
             grid.DefaultCellStyle.Font = new Font("Segoe UI", 9.5F);
             grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 250);
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        }
+
+        // Live-blocks any keystroke that isn't a letter, space, or dash - used for
+        // Name/Description-style fields. Backspace, delete, arrow keys, etc. still
+        // work normally since those are control characters, not printable ones.
+        private void RestrictToLettersSpaceDash(object sender, KeyPressEventArgs e)
+        {
+            if (char.IsControl(e.KeyChar)) return;
+            if (char.IsLetter(e.KeyChar) || e.KeyChar == ' ' || e.KeyChar == '-') return;
+
+            e.Handled = true;
+            lblStatus.ForeColor = Color.FromArgb(198, 40, 40);
+            lblStatus.Text = "Only letters, spaces, and dashes (-) are allowed here.";
         }
 
         // Measures every item text in a bound ComboBox and widens ONLY the
@@ -66,11 +84,20 @@ namespace AcademicManagement.Forms
                         if (prop != null) text = prop.GetValue(item)?.ToString() ?? text;
                     }
 
-                    int textWidth = (int)g.MeasureString(text, combo.Font).Width + 30; // padding for scrollbar/margins
+                    int textWidth = (int)g.MeasureString(text, combo.Font).Width + 30;
                     if (textWidth > widest) widest = textWidth;
                 }
             }
-            combo.DropDownWidth = widest;
+
+            // Cap the width so the dropdown never spills past the right edge of the
+            // screen - it's a top-level popup, not confined by the form, so without
+            // this cap a wide list can hang off the edge of the monitor and get
+            // visually cut off there instead of showing the full text.
+            var screenLocation = combo.PointToScreen(Point.Empty);
+            var workingArea = Screen.FromControl(combo).WorkingArea;
+            int maxAvailable = workingArea.Right - screenLocation.X - 10;
+
+            combo.DropDownWidth = Math.Min(widest, Math.Max(maxAvailable, combo.Width));
         }
 
         private async System.Threading.Tasks.Task RefreshAllAsync()
@@ -78,31 +105,42 @@ namespace AcademicManagement.Forms
             try
             {
                 _colleges = await _manager.GetCollegesAsync();
+
+                // cboCollegeId (Add/Edit form) still shows ALL Colleges - you should
+                // be able to assign any College when creating a new Program.
                 cboCollegeId.DataSource = _colleges
                     .Select(c => new { CollegeId = c.CollegeId, Display = $"{c.CollegeId} - {c.CollegeName}" })
                     .ToList();
                 cboCollegeId.SelectedIndex = -1;
-
-                // The closed box can only show ~630px of text, but some College
-                // names are much longer (e.g. "BS Business Administration -
-                // Marketing Management"). Widen just the OPEN dropdown list so
-                // nothing gets cut off there, without resizing the closed control.
                 WidenDropDownToFitContents(cboCollegeId);
 
                 _allPrograms = await _manager.GetProgramsAsync();
 
-                _suppressLoad = true;
-                grid.DataSource = null;
-                grid.DataSource = _allPrograms;
+                // cboFilterCollege (list filter) - ONLY Colleges that actually have at
+                // least one Program right now (distinct CollegeIds from _allPrograms),
+                // not the full master College list. Grows automatically as new
+                // Programs get added under a College that had none before.
+                var collegeLookup = _colleges.ToDictionary(c => c.CollegeId, c => c.CollegeName);
 
-                if (grid.Columns["Abbreviation"] != null)
-                    grid.Columns["Abbreviation"].Visible = false;
+                var filterOptions = _allPrograms
+                    .Select(p => p.CollegeId)
+                    .Distinct()
+                    .Select(cid => new
+                    {
+                        CollegeId = cid,
+                        Display = collegeLookup.TryGetValue(cid, out var name) ? $"{cid} - {name}" : cid
+                    })
+                    .OrderBy(x => x.CollegeId)
+                    .ToList();
+                filterOptions.Insert(0, new { CollegeId = (string)null, Display = "All Colleges" });
 
-                grid.ClearSelection();
-                grid.CurrentCell = null;
-                _suppressLoad = false;
-                _selectedRowIndex = -1;
+                cboFilterCollege.DataSource = filterOptions;
+                cboFilterCollege.DisplayMember = "Display";
+                cboFilterCollege.ValueMember = "CollegeId";
+                cboFilterCollege.SelectedIndex = 0;
+                WidenDropDownToFitContents(cboFilterCollege);
 
+                ApplyFilters();
                 ClearInputs();
             }
             catch (Exception ex)
@@ -110,7 +148,6 @@ namespace AcademicManagement.Forms
                 lblStatus.Text = "Could not load data: " + ex.Message;
             }
         }
-
 
         // Selects and scrolls the grid to the row matching the given ProgramId,
         // without re-populating the input fields (those stay cleared after Add/Update).
@@ -130,9 +167,15 @@ namespace AcademicManagement.Forms
             _suppressLoad = false;
         }
 
-        private void ApplySearchFilter()
+        // Combines the text Search box with the College filter dropdown above
+        // the grid - both can be used at the same time.
+        private void ApplyFilters()
         {
             var filtered = _manager.SearchPrograms(_allPrograms, txtSearch.Text);
+
+            var filterCollegeId = cboFilterCollege.SelectedValue as string;
+            if (!string.IsNullOrEmpty(filterCollegeId))
+                filtered = filtered.Where(p => p.CollegeId == filterCollegeId).ToList();
 
             _suppressLoad = true;
             grid.DataSource = null;
@@ -248,10 +291,20 @@ namespace AcademicManagement.Forms
                 return;
             }
 
-            var confirm = MessageBox.Show($"Delete Program '{txtProgramId.Text}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            var programId = txtProgramId.Text.Trim();
+            var curriculumCount = await _manager.GetProgramDependencyCountAsync(programId);
+
+            string message = curriculumCount > 0
+                ? $"This Program has {curriculumCount} Curriculum entry/entries linked to it.\n\n" +
+                  $"Deleting it will also delete all of these.\n\n" +
+                  $"The related College, Subjects, and Academic Offerings will NOT be affected.\n\n" +
+                  $"Continue?"
+                : $"Delete Program '{programId}'?";
+
+            var confirm = MessageBox.Show(message, "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (confirm != DialogResult.Yes) return;
 
-            await _manager.DeleteProgramAsync(txtProgramId.Text.Trim());
+            await _manager.DeleteProgramCascadeAsync(programId);
             ClearInputs();
             await RefreshAllAsync();
         }

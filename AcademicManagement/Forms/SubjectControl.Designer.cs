@@ -25,6 +25,8 @@ namespace AcademicManagement.Forms
             panelGridContainer = new Panel();
             grid = new DataGridView();
             lblListTitle = new Label();
+            lblFilterCategory = new Label();
+            cboFilterCategory = new BorderedComboBox();
             panelTopCard = new Panel();
             lblStatus = new Label();
             txtSearch = new TextBox();
@@ -70,6 +72,8 @@ namespace AcademicManagement.Forms
             panelListCard.BorderStyle = BorderStyle.FixedSingle;
             panelListCard.Controls.Add(panelGridContainer);
             panelListCard.Controls.Add(lblListTitle);
+            panelListCard.Controls.Add(lblFilterCategory);
+            panelListCard.Controls.Add(cboFilterCategory);
             panelListCard.Dock = DockStyle.Fill;
             panelListCard.Location = new Point(20, 285);
             panelListCard.Margin = new Padding(0, 20, 0, 0);
@@ -120,6 +124,29 @@ namespace AcademicManagement.Forms
             lblListTitle.TabIndex = 0;
             lblListTitle.Text = "▧  Course/Subject List";
             lblListTitle.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // lblFilterCategory
+            // 
+            lblFilterCategory.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lblFilterCategory.AutoSize = true;
+            lblFilterCategory.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            lblFilterCategory.ForeColor = Color.FromArgb(150, 20, 20);
+            lblFilterCategory.Location = new Point(723, 32);
+            lblFilterCategory.Name = "lblFilterCategory";
+            lblFilterCategory.Size = new Size(150, 21);
+            lblFilterCategory.TabIndex = 2;
+            lblFilterCategory.Text = "Filter by Category:";
+            // 
+            // cboFilterCategory
+            // 
+            cboFilterCategory.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            cboFilterCategory.BackColor = Color.FromArgb(250, 250, 250);
+            cboFilterCategory.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboFilterCategory.Font = new Font("Segoe UI", 9.5F);
+            cboFilterCategory.Location = new Point(883, 26);
+            cboFilterCategory.Name = "cboFilterCategory";
+            cboFilterCategory.Size = new Size(195, 29);
+            cboFilterCategory.TabIndex = 3;
             // 
             // panelTopCard
             // 
@@ -369,6 +396,7 @@ namespace AcademicManagement.Forms
             Size = new Size(1140, 900);
             panelMain.ResumeLayout(false);
             panelListCard.ResumeLayout(false);
+            panelListCard.PerformLayout();
             panelGridContainer.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)grid).EndInit();
             panelTopCard.ResumeLayout(false);
@@ -384,6 +412,8 @@ namespace AcademicManagement.Forms
         private System.Windows.Forms.Panel panelGridContainer;
         private System.Windows.Forms.DataGridView grid;
         private System.Windows.Forms.Label lblListTitle;
+        private System.Windows.Forms.Label lblFilterCategory;
+        private BorderedComboBox cboFilterCategory;
         private System.Windows.Forms.Panel panelTopCard;
         private System.Windows.Forms.Label lblStatus;
         private System.Windows.Forms.TextBox txtSearch;

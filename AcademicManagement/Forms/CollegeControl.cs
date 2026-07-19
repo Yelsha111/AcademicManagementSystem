@@ -27,6 +27,7 @@ namespace AcademicManagement.Forms
             txtSearch.TextChanged += (s, e) => ApplySearchFilter();
             grid.SelectionChanged += (s, e) => { if (!_suppressLoad) LoadSelectedIntoInputs(); };
             grid.CellClick += Grid_CellClick;
+            txtCollegeName.KeyPress += RestrictToLettersSpaceDash;
 
             this.Load += async (s, e) => await RefreshGridAsync();
         }
@@ -44,6 +45,19 @@ namespace AcademicManagement.Forms
             grid.DefaultCellStyle.Font = new Font("Segoe UI", 9.5F);
             grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 250);
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        }
+
+        // Live-blocks any keystroke that isn't a letter, space, or dash - used for
+        // Name/Description-style fields. Backspace, delete, arrow keys, etc. still
+        // work normally since those are control characters, not printable ones.
+        private void RestrictToLettersSpaceDash(object sender, KeyPressEventArgs e)
+        {
+            if (char.IsControl(e.KeyChar)) return;
+            if (char.IsLetter(e.KeyChar) || e.KeyChar == ' ' || e.KeyChar == '-') return;
+
+            e.Handled = true; // swallow the keystroke - it never reaches the textbox
+            lblStatus.ForeColor = Color.FromArgb(198, 40, 40);
+            lblStatus.Text = "Only letters, spaces, and dashes (-) are allowed here.";
         }
 
         private async System.Threading.Tasks.Task RefreshGridAsync()
@@ -68,7 +82,7 @@ namespace AcademicManagement.Forms
             }
         }
 
-       
+
 
         // Selects and scrolls the grid to the row matching the given CollegeId,
         // without re-populating the input fields (those stay cleared after Add/Update).
@@ -194,10 +208,20 @@ namespace AcademicManagement.Forms
                 return;
             }
 
-            var confirm = MessageBox.Show($"Delete College '{txtCollegeId.Text}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            var collegeId = txtCollegeId.Text.Trim();
+            var (programCount, curriculumCount) = await _manager.GetCollegeDependencyCountsAsync(collegeId);
+
+            string message = programCount > 0
+                ? $"This College has {programCount} Program(s) and {curriculumCount} Curriculum entry/entries linked to it.\n\n" +
+                  $"Deleting it will also delete all of these.\n\n" +
+                  $"Subjects and Academic Offerings will NOT be affected.\n\n" +
+                  $"Continue?"
+                : $"Delete College '{collegeId}'?";
+
+            var confirm = MessageBox.Show(message, "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (confirm != DialogResult.Yes) return;
 
-            await _manager.DeleteCollegeAsync(txtCollegeId.Text.Trim());
+            await _manager.DeleteCollegeCascadeAsync(collegeId);
             ClearInputs();
             await RefreshGridAsync();
         }

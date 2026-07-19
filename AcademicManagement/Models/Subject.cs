@@ -25,7 +25,7 @@ namespace AcademicManagement.Models
         public override string GetId() => SubjectCode;
 
         // Prerequisites (if any) must reference existing SubjectCodes.
-        public bool Validate(out string errorMessage, IEnumerable<string> existingSubjectCodes)
+        public bool Validate(out string errorMessage, IEnumerable<string> existingSubjectCodes, IEnumerable<Subject> existingSubjects = null, string excludeId = null)
         {
             if (string.IsNullOrWhiteSpace(SubjectCode))
             {
@@ -51,6 +51,20 @@ namespace AcademicManagement.Models
                     return false;
                 }
             }
+
+            if (existingSubjects != null)
+            {
+                var duplicate = existingSubjects.FirstOrDefault(s =>
+                    s.SubjectCode != excludeId &&
+                    string.Equals(s.SubjectDescription.Trim(), SubjectDescription.Trim(), System.StringComparison.OrdinalIgnoreCase));
+
+                if (duplicate != null)
+                {
+                    errorMessage = $"A subject named \"{SubjectDescription.Trim()}\" already exists ({duplicate.SubjectCode}).";
+                    return false;
+                }
+            }
+
             errorMessage = null;
             return true;
         }

@@ -1,10 +1,11 @@
+using AcademicManagement.Models;
+using AcademicManagement.Services;
+using Microsoft.VisualBasic.Devices;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using AcademicManagement.Models;
-using AcademicManagement.Services;
 
 namespace AcademicManagement.Managers
 {
@@ -80,6 +81,37 @@ namespace AcademicManagement.Managers
         public Task<bool> DeleteCollegeAsync(string collegeId) =>
             _firebase.DeleteAsync("colleges", collegeId);
 
+        // Counts how many Programs and Curriculum entries are linked to a College,
+        // so the UI can warn the user before deleting.
+        public async Task<(int programCount, int curriculumCount)> GetCollegeDependencyCountsAsync(string collegeId)
+        {
+            var linkedPrograms = (await GetProgramsAsync()).Where(p => p.CollegeId == collegeId).ToList();
+            var linkedProgramIds = linkedPrograms.Select(p => p.ProgramId).ToHashSet();
+            var linkedCurriculum = (await GetCurriculumAsync()).Where(c => linkedProgramIds.Contains(c.ProgramId)).ToList();
+            return (linkedPrograms.Count, linkedCurriculum.Count);
+        }
+
+        // Deletes a College and cascades down: removes every Program under it, and
+        // every Curriculum entry under those Programs. Subjects and Academic
+        // Offerings are never touched by this - they aren't directly linked to
+        // College/Program, only to SubjectCode.
+        public async Task<bool> DeleteCollegeCascadeAsync(string collegeId)
+        {
+            var linkedPrograms = (await GetProgramsAsync()).Where(p => p.CollegeId == collegeId).ToList();
+            var allCurriculum = await GetCurriculumAsync();
+
+            foreach (var program in linkedPrograms)
+            {
+                var linkedCurriculum = allCurriculum.Where(c => c.ProgramId == program.ProgramId).ToList();
+                foreach (var cur in linkedCurriculum)
+                    await _firebase.DeleteAsync("curriculum", cur.CurriculumID);
+
+                await _firebase.DeleteAsync("programs", program.ProgramId);
+            }
+
+            return await _firebase.DeleteAsync("colleges", collegeId);
+        }
+
         // ---------- Programs ----------
 
         public async Task<List<Models.Program>> GetProgramsAsync()
@@ -96,7 +128,7 @@ namespace AcademicManagement.Managers
             var newId = GenerateNextId(existingPrograms.Select(p => p.ProgramId), "PRG");
 
             var program = new Models.Program { ProgramId = newId, ProgramName = programName, CollegeId = collegeId };
-            if (!program.Validate(out var error, colleges.Select(c => c.CollegeId)))
+            if (!program.Validate(out var error, colleges.Select(c => c.CollegeId), existingPrograms))
                 return (false, error, null);
 
             var ok = await _firebase.SaveAsync("programs", newId, program.ToDictionary());
@@ -106,7 +138,8 @@ namespace AcademicManagement.Managers
         public async Task<(bool success, string error)> UpdateProgramAsync(Models.Program program)
         {
             var colleges = await GetCollegesAsync();
-            if (!program.Validate(out var error, colleges.Select(c => c.CollegeId)))
+            var existingPrograms = await GetProgramsAsync();
+            if (!program.Validate(out var error, colleges.Select(c => c.CollegeId), existingPrograms, excludeId: program.ProgramId))
                 return (false, error);
 
             var ok = await _firebase.SaveAsync("programs", program.ProgramId, program.ToDictionary());
@@ -115,6 +148,27 @@ namespace AcademicManagement.Managers
 
         public Task<bool> DeleteProgramAsync(string programId) =>
             _firebase.DeleteAsync("programs", programId);
+
+        // Counts how many Curriculum entries are linked to a Program, so the UI
+        // can warn the user before deleting.
+        public async Task<int> GetProgramDependencyCountAsync(string programId)
+        {
+            var linkedCurriculum = (await GetCurriculumAsync()).Where(c => c.ProgramId == programId).ToList();
+            return linkedCurriculum.Count;
+        }
+
+        // Deletes a Program and cascades down: removes every Curriculum entry
+        // linked to it. Subjects and Academic Offerings are never touched by
+        // this - they aren't directly linked to Program, only to SubjectCode.
+        public async Task<bool> DeleteProgramCascadeAsync(string programId)
+        {
+            var linkedCurriculum = (await GetCurriculumAsync()).Where(c => c.ProgramId == programId).ToList();
+
+            foreach (var cur in linkedCurriculum)
+                await _firebase.DeleteAsync("curriculum", cur.CurriculumID);
+
+            return await _firebase.DeleteAsync("programs", programId);
+        }
 
         // ---------- Subjects (Courses) ----------
 
@@ -129,7 +183,7 @@ namespace AcademicManagement.Managers
             var newId = GenerateNextId(sameCategory, prefix);
 
             var subject = new Subject { SubjectCode = newId, SubjectDescription = description, Units = units, Prerequisites = prerequisites };
-            if (!subject.Validate(out var error, existing.Select(s => s.SubjectCode)))
+            if (!subject.Validate(out var error, existing.Select(s => s.SubjectCode), existing))
                 return (false, error, null);
 
             var ok = await _firebase.SaveAsync("courses", newId, subject.ToDictionary());
@@ -145,7 +199,7 @@ namespace AcademicManagement.Managers
         public async Task<(bool success, string error)> UpdateSubjectAsync(Subject subject)
         {
             var existing = await GetSubjectsAsync();
-            if (!subject.Validate(out var error, existing.Select(s => s.SubjectCode)))
+            if (!subject.Validate(out var error, existing.Select(s => s.SubjectCode), existing, excludeId: subject.SubjectCode))
                 return (false, error);
 
             var ok = await _firebase.SaveAsync("courses", subject.SubjectCode, subject.ToDictionary());
@@ -154,6 +208,31 @@ namespace AcademicManagement.Managers
 
         public Task<bool> DeleteSubjectAsync(string subjectCode) =>
             _firebase.DeleteAsync("courses", subjectCode);
+
+        // Counts how many Curriculum entries and Academic Offerings are linked to
+        // a Subject, so the UI can warn the user before deleting.
+        public async Task<(int curriculumCount, int offeringCount)> GetSubjectDependencyCountsAsync(string subjectCode)
+        {
+            var linkedCurriculum = (await GetCurriculumAsync()).Where(c => c.SubjectCode == subjectCode).ToList();
+            var linkedOfferings = (await GetOfferingsAsync()).Where(o => o.SubjectCode == subjectCode).ToList();
+            return (linkedCurriculum.Count, linkedOfferings.Count);
+        }
+
+        // Deletes a Subject and cascades: removes every Curriculum entry AND every
+        // Academic Offering that reference it. Colleges and Programs are never
+        // touched by this - Subjects aren't directly linked to either of those.
+        public async Task<bool> DeleteSubjectCascadeAsync(string subjectCode)
+        {
+            var linkedCurriculum = (await GetCurriculumAsync()).Where(c => c.SubjectCode == subjectCode).ToList();
+            foreach (var cur in linkedCurriculum)
+                await _firebase.DeleteAsync("curriculum", cur.CurriculumID);
+
+            var linkedOfferings = (await GetOfferingsAsync()).Where(o => o.SubjectCode == subjectCode).ToList();
+            foreach (var off in linkedOfferings)
+                await _firebase.DeleteAsync("academicofferings", off.OfferingID);
+
+            return await _firebase.DeleteAsync("courses", subjectCode);
+        }
 
         // ---------- Curriculum ----------
 
@@ -193,12 +272,40 @@ namespace AcademicManagement.Managers
         public Task<bool> DeleteCurriculumAsync(string curriculumId) =>
             _firebase.DeleteAsync("curriculum", curriculumId);
 
+        // Soft-check: does a Curriculum entry with this exact Program + Subject +
+        // YearLevel + Semester combo already exist? Not a hard block in Validate() -
+        // the Form layer asks the user Yes/No before saving anyway, since a genuine
+        // re-offering of the same subject in the same slot might be intentional.
+        public async Task<bool> IsDuplicateCurriculumAsync(string programId, string subjectCode, int yearLevel, string semester, string excludeId = null)
+        {
+            var existing = await GetCurriculumAsync();
+            return existing.Any(c =>
+                c.CurriculumID != excludeId &&
+                c.ProgramId == programId &&
+                c.SubjectCode == subjectCode &&
+                c.YearLevel == yearLevel &&
+                string.Equals((c.Semester ?? "").Trim(), (semester ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+        }
+
         // ---------- Academic Offerings ----------
 
         public async Task<List<AcademicOffering>> GetOfferingsAsync()
         {
             var dict = await _firebase.GetAllAsync<AcademicOffering>("academicofferings");
             return dict.Values.ToList();
+        }
+
+        // Soft-check: does an Offering with this exact Subject + SchoolYear +
+        // Semester combo already exist? Same reasoning as Curriculum above - Form
+        // layer prompts Yes/No instead of a hard block.
+        public async Task<bool> IsDuplicateOfferingAsync(string subjectCode, string schoolYear, string semester, string excludeId = null)
+        {
+            var existing = await GetOfferingsAsync();
+            return existing.Any(o =>
+                o.OfferingID != excludeId &&
+                o.SubjectCode == subjectCode &&
+                string.Equals((o.SchoolYear ?? "").Trim(), (schoolYear ?? "").Trim(), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals((o.Semester ?? "").Trim(), (semester ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
         }
 
         // Adds a new Academic Offering. OfferingID is generated automatically (OFR001, OFR002, ...).
@@ -238,10 +345,12 @@ namespace AcademicManagement.Managers
                                   || c.CollegeName.ToLower().Contains(keyword.ToLower())).ToList();
 
         public List<Models.Program> SearchPrograms(List<Models.Program> source, string keyword) =>
-            string.IsNullOrWhiteSpace(keyword)
-                ? source
-                : source.Where(p => p.ProgramId.ToLower().Contains(keyword.ToLower())
-                                  || p.ProgramName.ToLower().Contains(keyword.ToLower())).ToList();
+    string.IsNullOrWhiteSpace(keyword)
+        ? source
+        : source.Where(p => p.ProgramId.ToLower().Contains(keyword.ToLower())
+                          || p.ProgramName.ToLower().Contains(keyword.ToLower())
+                          || p.CollegeId.ToLower().Contains(keyword.ToLower())).ToList();
+
 
         public List<Subject> SearchSubjects(List<Subject> source, string keyword) =>
             string.IsNullOrWhiteSpace(keyword)

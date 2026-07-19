@@ -25,6 +25,8 @@ namespace AcademicManagement.Forms
             panelGridContainer = new Panel();
             grid = new DataGridView();
             lblListTitle = new Label();
+            lblFilterProgram = new Label();
+            cboFilterProgram = new BorderedComboBox();
             panelTopCard = new Panel();
             lblStatus = new Label();
             txtSearch = new TextBox();
@@ -70,6 +72,8 @@ namespace AcademicManagement.Forms
             panelListCard.BorderStyle = BorderStyle.FixedSingle;
             panelListCard.Controls.Add(panelGridContainer);
             panelListCard.Controls.Add(lblListTitle);
+            panelListCard.Controls.Add(lblFilterProgram);
+            panelListCard.Controls.Add(cboFilterProgram);
             panelListCard.Dock = DockStyle.Fill;
             panelListCard.Location = new Point(20, 290);
             panelListCard.Margin = new Padding(0, 20, 0, 0);
@@ -120,6 +124,29 @@ namespace AcademicManagement.Forms
             lblListTitle.TabIndex = 0;
             lblListTitle.Text = "▥  Curriculum List";
             lblListTitle.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // lblFilterProgram
+            // 
+            lblFilterProgram.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lblFilterProgram.AutoSize = true;
+            lblFilterProgram.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            lblFilterProgram.ForeColor = Color.FromArgb(150, 20, 20);
+            lblFilterProgram.Location = new Point(723, 32);
+            lblFilterProgram.Name = "lblFilterProgram";
+            lblFilterProgram.Size = new Size(150, 21);
+            lblFilterProgram.TabIndex = 2;
+            lblFilterProgram.Text = "Filter by Program:";
+            // 
+            // cboFilterProgram
+            // 
+            cboFilterProgram.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            cboFilterProgram.BackColor = Color.FromArgb(250, 250, 250);
+            cboFilterProgram.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboFilterProgram.Font = new Font("Segoe UI", 9.5F);
+            cboFilterProgram.Location = new Point(883, 26);
+            cboFilterProgram.Name = "cboFilterProgram";
+            cboFilterProgram.Size = new Size(195, 29);
+            cboFilterProgram.TabIndex = 3;
             // 
             // panelTopCard
             // 
@@ -373,6 +400,7 @@ namespace AcademicManagement.Forms
             Size = new Size(1140, 900);
             panelMain.ResumeLayout(false);
             panelListCard.ResumeLayout(false);
+            panelListCard.PerformLayout();
             panelGridContainer.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)grid).EndInit();
             panelTopCard.ResumeLayout(false);
@@ -407,5 +435,7 @@ namespace AcademicManagement.Forms
         private DataGridView grid;
         private Label lblListTitle;
         private Label lblYearLevel;
+        private Label lblFilterProgram;
+        private BorderedComboBox cboFilterProgram;
     }
 }

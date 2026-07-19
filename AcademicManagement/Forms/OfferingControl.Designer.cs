@@ -25,6 +25,8 @@ namespace AcademicManagement.Forms
             panelGridContainer = new Panel();
             grid = new DataGridView();
             lblListTitle = new Label();
+            lblFilterStatus = new Label();
+            cboFilterStatus = new BorderedComboBox();
             panelTopCard = new Panel();
             lblStatusMsg = new Label();
             txtSearch = new TextBox();
@@ -69,6 +71,8 @@ namespace AcademicManagement.Forms
             panelListCard.BorderStyle = BorderStyle.FixedSingle;
             panelListCard.Controls.Add(panelGridContainer);
             panelListCard.Controls.Add(lblListTitle);
+            panelListCard.Controls.Add(lblFilterStatus);
+            panelListCard.Controls.Add(cboFilterStatus);
             panelListCard.Dock = DockStyle.Fill;
             panelListCard.Location = new Point(20, 292);
             panelListCard.Margin = new Padding(0, 20, 0, 0);
@@ -119,6 +123,31 @@ namespace AcademicManagement.Forms
             lblListTitle.TabIndex = 0;
             lblListTitle.Text = "▦  Academic Offering List";
             lblListTitle.TextAlign = ContentAlignment.MiddleLeft;
+            lblListTitle.Click += lblListTitle_Click;
+            // 
+            // lblFilterStatus
+            // 
+            lblFilterStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lblFilterStatus.AutoSize = true;
+            lblFilterStatus.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+            lblFilterStatus.ForeColor = Color.FromArgb(150, 20, 20);
+            lblFilterStatus.Location = new Point(743, 32);
+            lblFilterStatus.Name = "lblFilterStatus";
+            lblFilterStatus.Size = new Size(127, 21);
+            lblFilterStatus.TabIndex = 2;
+            lblFilterStatus.Text = "Filter by Status:";
+            // 
+            // cboFilterStatus
+            // 
+            cboFilterStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            cboFilterStatus.BackColor = Color.FromArgb(250, 250, 250);
+            cboFilterStatus.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboFilterStatus.FlatStyle = FlatStyle.Flat;
+            cboFilterStatus.Font = new Font("Segoe UI", 9.5F);
+            cboFilterStatus.Location = new Point(883, 26);
+            cboFilterStatus.Name = "cboFilterStatus";
+            cboFilterStatus.Size = new Size(195, 29);
+            cboFilterStatus.TabIndex = 3;
             // 
             // panelTopCard
             // 
@@ -156,7 +185,7 @@ namespace AcademicManagement.Forms
             lblStatusMsg.ForeColor = Color.FromArgb(198, 40, 40);
             lblStatusMsg.Location = new Point(806, 168);
             lblStatusMsg.Name = "lblStatusMsg";
-            lblStatusMsg.Size = new Size(272, 44);
+            lblStatusMsg.Size = new Size(272, 75);
             lblStatusMsg.TabIndex = 0;
             // 
             // txtSearch
@@ -248,6 +277,7 @@ namespace AcademicManagement.Forms
             // 
             cboStatus.BackColor = Color.FromArgb(250, 250, 250);
             cboStatus.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboStatus.FlatStyle = FlatStyle.Flat;
             cboStatus.Font = new Font("Segoe UI", 9.5F);
             cboStatus.FormattingEnabled = true;
             cboStatus.Items.AddRange(new object[] { "Open", "Closed", "Cancelled" });
@@ -314,6 +344,7 @@ namespace AcademicManagement.Forms
             cboSubjectCode.BackColor = Color.FromArgb(250, 250, 250);
             cboSubjectCode.DisplayMember = "Display";
             cboSubjectCode.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboSubjectCode.FlatStyle = FlatStyle.Flat;
             cboSubjectCode.Font = new Font("Segoe UI", 9.5F);
             cboSubjectCode.FormattingEnabled = true;
             cboSubjectCode.Location = new Point(360, 95);
@@ -371,6 +402,7 @@ namespace AcademicManagement.Forms
             Size = new Size(1140, 900);
             panelMain.ResumeLayout(false);
             panelListCard.ResumeLayout(false);
+            panelListCard.PerformLayout();
             panelGridContainer.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)grid).EndInit();
             panelTopCard.ResumeLayout(false);
@@ -385,6 +417,8 @@ namespace AcademicManagement.Forms
         private System.Windows.Forms.Panel panelGridContainer;
         private System.Windows.Forms.DataGridView grid;
         private System.Windows.Forms.Label lblListTitle;
+        private System.Windows.Forms.Label lblFilterStatus;
+        private BorderedComboBox cboFilterStatus;
         private System.Windows.Forms.Panel panelTopCard;
         private System.Windows.Forms.Label lblStatusMsg;
         private System.Windows.Forms.TextBox txtSearch;
